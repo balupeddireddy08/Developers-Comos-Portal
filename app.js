@@ -80,7 +80,19 @@ passport.use(new GoogleStrategy({
     });
   }
 ));
-
+const ensureAuthenticated =  function(req, res, next) {
+   if (req.isAuthenticated()) {
+     return next();
+   }
+   req.flash('error_msg', 'Please log in to view that resource');
+   res.redirect('/login');
+ };
+ const forwardAuthenticated = function(req, res, next) {
+   if (!req.isAuthenticated()) {
+     return next();
+   }
+   res.redirect('/welcome');
+ };
 
 
 app.use(function(req, res, next) {
@@ -89,7 +101,7 @@ app.use(function(req, res, next) {
   res.locals.error = req.flash('error');
   next();
 });
-app.get("/",function(req,res){
+app.get("/",forwardAuthenticated,function(req,res){
   res.render("home");
 });
 app.get("/auth/google",passport.authenticate("google",{scope:["profile"]})
@@ -100,13 +112,13 @@ app.get("/auth/google/welcome",
     res.redirect("/welcome");
 });
 
-app.get("/login",function(req,res){
+app.get("/login",forwardAuthenticated,function(req,res){
   res.render("login");
 });
-app.get("/register",function(req,res){
+app.get("/register",forwardAuthenticated,function(req,res){
   res.render("register");
 });
-app.get("/welcome",function(req,res){
+app.get("/welcome",ensureAuthenticated,function(req,res){
   res.render("welcome");
 });
 app.post("/register",function(req,res){
