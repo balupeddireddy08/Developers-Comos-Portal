@@ -9,14 +9,39 @@ const flash = require("connect-flash");
 const bcrypt = require("bcrypt");
 const saltRounds = 10;
 const LocalStrategy = require('passport-local').Strategy;
-
+const GoogleStrategy = require("passport-google-oauth20").Strategy;
 const session = require("express-session");
 const passportLocalMongoose = require("passport-local-mongoose");
 const findOrCreate = require("mongoose-findorcreate");
 const app = express();
-passport.use(new LocalStrategy(
-  function(email, password, done) {
-    User.findOne({ email: email }, function(err, user) {
+app.use(express.static("public"));
+app.set('view engine','ejs');
+app.use(bodyParser.urlencoded({extended:true}));
+
+app.use(session({
+  secret:process.env.SECRET,
+  resave: false,
+  saveUninitialized: false
+}));
+app.use(passport.initialize());
+app.use(passport.session());
+app.use(flash());
+
+mongoose.connect("mongodb://localhost:27017/LoginDB",{useNewUrlParser:true,useUnifiedTopology:true});
+mongoose.set("useCreateIndex",true);
+
+const userSchema = new mongoose.Schema({
+  name :String,
+  email : String,
+  password : String,
+  googleId:String
+});
+userSchema.plugin(passportLocalMongoose);
+userSchema.plugin(findOrCreate);
+const User = mongoose.model("user",userSchema);
+passport.use(new LocalStrategy({usernameField:'email',passwordField:'password'},
+  function(username, password, done) {
+    User.findOne({ email: username }, function(err, user) {
       if (err) { return done(err); }
       if (!user) {
         return done(null, false, { message: 'Incorrect username.' });
@@ -43,30 +68,19 @@ passport.deserializeUser(function(id, done) {
     done(err, user);
   });
 });
-app.use(express.static("public"));
-app.set('view engine','ejs');
-app.use(bodyParser.urlencoded({extended:true}));
+passport.use(new GoogleStrategy({
+    clientID: process.env.CLIENT_ID,
+    clientSecret: process.env.CLIENT_SECRET,
+    callbackURL: "http://localhost:3000/auth/google/welcome",
+    userProfileURL:"https://www.googleapis.com/oauth2/v3/userinfo"
+  },
+  function(accessToken, refreshToken, profile, cb) {
+    User.findOrCreate({ googleId: profile.id }, function (err, user) {
+      return cb(err, user);
+    });
+  }
+));
 
-app.use(session({
-  secret:"Thisisnotmysecret",
-  resave: false,
-  saveUninitialized: false
-}));
-app.use(passport.initialize());
-app.use(passport.session());
-app.use(flash());
-
-mongoose.connect("mongodb://localhost:27017/LoginDB",{useNewUrlParser:true,useUnifiedTopology:true});
-mongoose.set("useCreateIndex",true);
-
-const userSchema = new mongoose.Schema({
-  name :{type: String,unique:true},
-  email : {type:String,unique:true},
-  password : String
-});
-userSchema.plugin(passportLocalMongoose);
-userSchema.plugin(findOrCreate);
-const User = mongoose.model("user",userSchema);
 
 
 app.use(function(req, res, next) {
@@ -78,6 +92,14 @@ app.use(function(req, res, next) {
 app.get("/",function(req,res){
   res.render("home");
 });
+app.get("/auth/google",passport.authenticate("google",{scope:["profile"]})
+);
+app.get("/auth/google/welcome",
+  passport.authenticate("google",{failureRedirect:"/login"}),
+  function(req,res){
+    res.redirect("/welcome");
+});
+
 app.get("/login",function(req,res){
   res.render("login");
 });
@@ -134,13 +156,8 @@ app.post("/register",function(req,res){
           bcrypt.hash(newUser.password, salt, function(err, hash) {
             if (err) throw err;
             newUser.password = hash;
-            newUser
-              .save()
-              .then(user => {
-                res.redirect('/welcome');
-              })
-              .catch(err => console.log(err));
-
+            newUser.save();
+            res.redirect('/welcome');
 
           });
         });
