@@ -27,7 +27,7 @@ app.use(passport.initialize());
 app.use(passport.session());
 app.use(flash());
 
-mongoose.connect("mongodb://localhost:27017/LoginDB",{useNewUrlParser:true,useUnifiedTopology:true});
+mongoose.connect("mongodb+srv://akhil-admin:akhil123g@cluster0-bhbgk.mongodb.net/LoginDB",{useNewUrlParser:true,useUnifiedTopology:true});
 mongoose.set("useCreateIndex",true);
 
 const userSchema = new mongoose.Schema({
